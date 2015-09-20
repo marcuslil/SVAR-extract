@@ -90,12 +90,13 @@ def read_lh5_header(f, pos=None):
     header = {}
     if pos:
         f.seek(pos)
-    l = fromfile(f, dtype=uint32, count=1)[0]
-    if l == 0:
+    d = f.read(4)
+    if d == b'':
         return None
+    l = fromstring(d, dtype=uint32, count=1)[0]
     header['next_header'] = f.tell() + l
     b = f.read(len(lh5_header))
-    assert b == lh5_header, ('!' + b ,  hex(f.tell()))
+    assert b == lh5_header, (b'!' + b ,  hex(f.tell()))
     header['uncompressed_size'] = fromfile(f, dtype=uint32, count=1)[0]
     assert_zero(f.read(1))
     header['unknown']= fromfile(f, dtype=uint32, count=1)[0]
