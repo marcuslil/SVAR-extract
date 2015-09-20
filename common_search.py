@@ -8,6 +8,7 @@ Created on Sat Aug  1 19:18:49 2015
 from common import *
 from copy import deepcopy
 from compare import compare
+from numpy import fromstring
 
 [Match_exact, Match_exact_ignore_accents, Match_any, Match_begin, Match_end, Match_star] = range(6)
    
@@ -25,7 +26,7 @@ def find_files(setup):
             if filename:
                 setup['files'][key][suffix + '_file'] = filename
 
-def search_indexed_file(search_term, i_file, iz_file=None, b1_file=None, match=Match_star, i_offset=0, iz_offset=0, b1_offset=0, output='b1', file_ignore_accents=False):
+def search_indexed_file(search_term, i_file, iz_file=None, b1_file=None, match=Match_star, output='b1', file_ignore_accents=False):
     if match == Match_star:
         if search_term.startswith('*') and search_term.endswith('*'):
             search_term = search_term[1:-1]
@@ -47,15 +48,13 @@ def search_indexed_file(search_term, i_file, iz_file=None, b1_file=None, match=M
         search_term_unicode = search_term.decode('latin1').lower()
     ids = set()
     f_i = open(i_file, 'rb')
-    f_i.seek(i_offset)
     i_header = read_i_header(f_i)
     l = len(search_term)
     if i_header['compressed']:
         f_iz = open(iz_file, 'rb')
-        f_iz.seek(iz_offset)
         iz_header = read_iz_header(f_iz)
         f_iz.seek(iz_header['start_pos'])
-        iz_indexes = fromfile(f_iz, count=iz_header['length'] * 4, dtype=uint32) + i_offset
+        iz_indexes = fromfile(f_iz, count=iz_header['length'] * 4, dtype=uint32)
         f_iz.close()
         #assert header['data1'] * 10 == index['unknown'], (header['data1'], index['unknown'])
         # find first and last index if searching sorted
@@ -95,7 +94,6 @@ def search_indexed_file(search_term, i_file, iz_file=None, b1_file=None, match=M
         
     if output=='b1':
         f_b1 = open(b1_file, 'rb')
-        f_b1.seek(b1_offset)
         data = f_b1.read(16)
         assert data == b1_header, map(ord, data)
     
@@ -112,9 +110,9 @@ def search_indexed_file(search_term, i_file, iz_file=None, b1_file=None, match=M
             while last_entry != first_entry + 1:
                 test_entry = int((first_entry + last_entry) / 2)
                 n = test_entry * i_header['entry_size']     
-                assert str_to_int(block, n + 0, 4) == 0x00, (hex(n), ord(block[n+5]))
+                assert fromstring(block[n + 0: n + 4], dtype=uint32, count=1)[0] == 0x00, (hex(n), ord(block[n+5]))
                 if output=='b1':
-                    assert str_to_int(block, n + 4, 4) == 0x90, (hex(n), ord(block[n+5]))
+                    assert fromstring(block[n + 4: n + 8], dtype=uint32, count=1)[0] == 0x90, (hex(n), ord(block[n+5]))
                 n += 8
                 data = find_terminated_string(block, n)
                 comp = compare(data, search_term, ignore_accents=file_ignore_accents)
@@ -127,9 +125,9 @@ def search_indexed_file(search_term, i_file, iz_file=None, b1_file=None, match=M
                     last_entry = test_entry + 1
             
         for n in range(first_entry * i_header['entry_size'], len(block), i_header['entry_size']):
-            assert str_to_int(block, n + 0, 4) == 0x00, (hex(n), ord(block[n+5]))
+            assert fromstring(block[n + 0: n + 4], dtype=uint32, count=1)[0] == 0x00, (hex(n), ord(block[n+5]))
             if output=='b1':
-                assert str_to_int(block, n + 4, 4) == 0x90, (hex(n), ord(block[n+5]))
+                assert fromstring(block[n + 4: n + 8], dtype=uint32, count=1)[0] == 0x90, (hex(n), ord(block[n+5]))
             n += 8
             data = find_terminated_string(block, n)
             l = min(len(search_term), len(data))
@@ -143,12 +141,12 @@ def search_indexed_file(search_term, i_file, iz_file=None, b1_file=None, match=M
                (match == Match_any and data_unicode.count(search_term_unicode) > 0):
 
                 if output=='b1':
-                    b1_pos = str_to_int(block, n, 4)
-                    b1_len = str_to_int(block, n + 4, 4)
+                    b1_pos = fromstring(block[n + 0: n + 4], dtype=uint32, count=1)[0]
+                    b1_len = fromstring(block[n + 4: n + 8], dtype=uint32, count=1)[0]
                     if b1_len == 0:
                         ids.add(b1_pos)
                     else:
-                        read_b1_data(f_b1, b1_pos + b1_offset, b1_len, ids)
+                        read_b1_data(f_b1, b1_pos, b1_len, ids)
                     '''
                     for n in range(n + 8, n_stop):
                         assert ord(block[n]) == 0, ord(block[n])'''
