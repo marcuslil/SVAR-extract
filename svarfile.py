@@ -33,9 +33,10 @@ class File_type(Enum):
     fixed_size = 0
     variable_size = 1
 
-def parse_format(string, length, format_list):
+def parse_format(string, format_list):
     res = OrderedDict()
     pos = 0
+    length = len(string)
 
     for f in format_list:
         if f['type'] in ['uint8', 'uint16', 'uint32']:
@@ -179,50 +180,59 @@ class SVAR_file:
         #empty buffer at start
         self.curr_block = io.BytesIO(b'')
         self.curr_block_nr = -1
+        self.curr_block_size_loaded = 0
         if self.file_type == File_type.fixed_size:
             self.block_entrys = 0
-            self.entrys_loaded = 0
     
     def load_block(self, block_nr=-1, nr_entries=-1):
         if self.compressed == True:
             if block_nr == -1: # next block
-                self.curr_block_nr += 1
+                block_nr = self.curr_block_nr + 1
             else:
                 self.block_index_file.seek(block_nr * 4 + self.block_index_header['start_pos'])
-                offset = fromfile(self.block_index_file, uint32, 1)
+                offset = fromfile(self.block_index_file, uint32, 1)[0]
                 self.data_file.seek(offset)
-                self.curr_block_nr = block_nr
 
             lh5_header = read_lh5_header(self.data_file)
             if not lh5_header:
                 self.curr_block = io.BytesIO(b'')
                 self.block_entrys = 0
-                self.entrys_loaded = 0
+                self.curr_block_size_loaded = 0
                 return
             
             if self.file_type == File_type.fixed_size:
                 assert lh5_header['uncompressed_size'] <= self.first_lh5_header['uncompressed_size']
                 
-            size = lh5_header['uncompressed_size'] if nr_entries == -1 else min(self.entry_size * nr_entries, lh5_header['uncompressed_size'])            
-            data = check_output([lh5_bin, self.data_file_name, str(size), str(lh5_header['compressed_start']), str(lh5_header['compressed_size'])])
-            self.curr_block = io.BytesIO(data)
+            size = lh5_header['uncompressed_size'] if nr_entries == -1 else min(self.entry_size * nr_entries, lh5_header['uncompressed_size'])
+            if size == self.curr_block_size_loaded and self.curr_block_nr == block_nr:
+                self.curr_block.seek(0)
+            else:
+                data = check_output([lh5_bin, self.data_file_name, str(size), str(lh5_header['compressed_start']), str(lh5_header['compressed_size'])])
+                assert len(data) == size
+                self.curr_block = io.BytesIO(data)
+                if self.file_type == File_type.fixed_size:
+                    self.block_entrys = int(lh5_header['uncompressed_size'] / self.entry_size)
+                self.curr_block_size_loaded = len(data)
+                
             self.data_file.seek(lh5_header['next_header'])
-            if self.file_type == File_type.fixed_size:
-                self.block_entrys = int(lh5_header['uncompressed_size'] / self.entry_size)
-                self.entrys_loaded = nr_entries if nr_entries != -1 else self.block_entrys
         else:
-            assert block_nr in [-1, 0]
+            if block_nr == -1:
+                block_nr = self.curr_block_nr + 1
+            assert block_nr in [0, 1], block_nr
             self.curr_block = self.data_file
-            self.curr_block.seek(self.data_offset)
+            if block_nr == 0:
+                self.curr_block.seek(self.data_offset)
+            else:
+                self.curr_block.seek(0, 2)
             if self.file_type == File_type.fixed_size:
                 self.block_entrys = self.nr_entrys
-                self.entrys_loaded = self.nr_entrys
+
+        self.curr_block_nr = block_nr
     
     def goto(self, entry_nr):    
         if self.compressed:
             block_nr = int(entry_nr / self.entrys_per_block)
-            if block_nr != self.curr_block_nr or self.block_entrys != self.entrys_loaded:
-                self.load_block(block_nr)
+            self.load_block(block_nr)
             sub_entry = entry_nr % self.entrys_per_block
             if self.file_type == File_type.fixed_size:
                 self.curr_block.seek(sub_entry * self.entry_size)
@@ -238,7 +248,7 @@ class SVAR_file:
         if entry_nr != -1:
             self.goto(entry_nr)
 
-        read_size = 12 if self.file_type == File_type.variable_size else self.entry_size            
+        read_size = 8 if self.file_type == File_type.variable_size else self.entry_size            
         res = self.curr_block.read(read_size)
         if not res:
             self.load_block()
@@ -247,9 +257,7 @@ class SVAR_file:
         if self.file_type == File_type.fixed_size:
             return res
         else:
-            (unknown, length, zero) = fromstring(res, "<u4, <u4, <u4")[0]
+            (unknown, length) = fromstring(res, "<u4, <u4")[0]
             length = int(length)
-            assert zero == 0
-
-            res = self.curr_block.read(length)
+            res = self.curr_block.read(length + 4)
             return res

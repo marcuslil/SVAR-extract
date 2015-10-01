@@ -7,7 +7,7 @@ Created on Thu Nov  6 22:40:21 2014
 
 from copy import copy
 
-sort_string = u"\t\r !\"#$%&'()*+÷,-./0123456789:;<=>?_\xab\x83\x85\x88\x8b\x93\x96¼½¾\xa0\xa8`|¦´ªº~aáàâbcçdðeéèêëfghiíìïîjklmnoôóòpqrsßtÞuúùûvwxyýŸüzõåäæöØã[]{}§"
+sort_string = u"\t\r\n !\"#$%&'()*+÷,-./0123456789:;<=>?_\xab\x83\x85\x88\x8b\x93\x96¼½¾\xa0\xa8`|¦´ªº~aáàâbcçdðeéèêëfghiíìïîjklmnoôóòpqrsßtÞuúùûvwxyýŸüzõåäæöØã[]{}§"
 accents = ((u'é',u'e'), (u'è',u'e'),(u'ü',u'y'))
 
 sort_index = [-1] * 256

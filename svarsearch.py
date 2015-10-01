@@ -37,9 +37,10 @@ def read_b1_data(f, pos, length, id1):
     id1.update(set(res))  
 
 class SVAR_search(SVAR_file):
-    def __init__(self, data_file_name, block_index_file_name=None, b1_file_name=None):
+    def __init__(self, data_file_name, block_index_file_name=None, b1_file_name=None, ignore_accents=False):
         SVAR_file.__init__(self, data_file_name=data_file_name, block_index_file_name=block_index_file_name, file_type=File_type.fixed_size, entry_index_file_name=None)
         self.b1_file_name = b1_file_name
+        self.ignore_accents = ignore_accents
         
     def open(self):
         SVAR_file.open(self)
@@ -57,13 +58,13 @@ class SVAR_search(SVAR_file):
             if not entry:
                 return True
             data = find_terminated_string(entry, 8)
-            comp = compare(last, data)
-            print(last, data)
-            if comp != -1:
+            comp = compare(last, data, self.ignore_accents)
+            if comp == 1 or (comp == 0 and self.ignore_accents == False):
+                print(last, data, comp)
                 return False
             last = data
     
-    def search(self, search_term, match=Match_star, output='b1', file_ignore_accents=False):
+    def search(self, search_term, match=Match_star, output='b1'):
         if match == Match_star:
             if search_term.startswith('*') and search_term.endswith('*'):
                 search_term = search_term[1:-1]
@@ -90,16 +91,16 @@ class SVAR_search(SVAR_file):
                     self.load_block(test_block_nr, 1)     
                     entry = self.read_entry()
                     data = find_terminated_string(entry, 8)
-                    comp = compare(data, search_term, ignore_accents=file_ignore_accents)
+                    comp = compare(data, search_term, ignore_accents=self.ignore_accents)
                     if comp < 0: # data before search_term
                         first_block_nr = test_block_nr
-                    elif comp > 0 or file_ignore_accents:
+                    elif comp > 0 or self.ignore_accents:
                         last_block_nr = test_block_nr
                     else: #comp == 0:
                         first_block_nr = test_block_nr
                         last_block_nr = test_block_nr + 1
     
-                if match == Match_begin or file_ignore_accents: # find last_block_nr
+                if match == Match_begin or self.ignore_accents: # find last_block_nr
                     first_block_nr2 = first_block_nr
                     last_block_nr = self.block_index_header['length']
                     while last_block_nr != first_block_nr2 + 1:
@@ -107,7 +108,7 @@ class SVAR_search(SVAR_file):
                         self.load_block(test_block_nr, 1)     
                         entry = self.read_entry()
                         data = find_terminated_string(entry, 8)
-                        comp = compare(data[:search_term_length], search_term, file_ignore_accents)
+                        comp = compare(data[:search_term_length], search_term, self.ignore_accents)
                         if comp <= 0:
                             first_block_nr2 = test_block_nr
                         else:
@@ -124,27 +125,26 @@ class SVAR_search(SVAR_file):
                 test_entry_nr = int((first_entry_nr + last_entry_nr) / 2)
                 entry = self.read_entry(test_entry_nr)
                 a = fromstring(entry[0:8], uint32)
-                assert a[0] == 0x00 and (a[1] == 0x90 or output != 'b1'), entry
+                assert a[0] == 0x00 and (a[1] == 0x90 or output != 'b1'), (entry, a)
                 data = find_terminated_string(entry, 8)
-                comp = compare(data, search_term, ignore_accents=file_ignore_accents)
+                comp = compare(data, search_term, ignore_accents=self.ignore_accents)
                 if comp < 0:
                     first_entry_nr = test_entry_nr
-                elif comp > 0 or file_ignore_accents:
+                elif comp > 0 or self.ignore_accents:
                     last_entry_nr = test_entry_nr
                 else: # comp == 0:
                     first_entry_nr = test_entry_nr
                     last_entry_nr = test_entry_nr + 1
 
-            if match == Match_begin or file_ignore_accents:
-                if last_block_nr - 1 != self.curr_block_nr:
-                    self.load_block(last_block_nr - 1)
+            if match == Match_begin or self.ignore_accents:
+                self.load_block(last_block_nr - 1)
                 first_entry_nr2 = self.entrys_per_block * (last_block_nr - 1)
                 last_entry_nr = first_entry_nr2 + self.block_entrys
                 while last_entry_nr != first_entry_nr2 + 1:
                     test_entry_nr = int((first_entry_nr2 + last_entry_nr) / 2)
                     entry = self.read_entry(test_entry_nr)
                     data = find_terminated_string(entry, 8)
-                    comp = compare(data[:search_term_length], search_term, file_ignore_accents)
+                    comp = compare(data[:search_term_length], search_term, self.ignore_accents)
                     if comp <= 0:
                         first_entry_nr2 = test_entry_nr
                     else:
@@ -160,9 +160,9 @@ class SVAR_search(SVAR_file):
             a = fromstring(entry[0:8], uint32)
             assert a[0] == 0x00 and (a[1] == 0x90 or output != 'b1'), entry
             data = find_terminated_string(entry, 8)
-            if (match == Match_exact and compare(data, search_term, file_ignore_accents) == 0) or \
-               (match == Match_begin and compare(data[:search_term_length], search_term, file_ignore_accents) == 0) or \
-               (match == Match_end   and compare(data[-search_term_length:-1],  search_term) == 0) or \
+            if (match == Match_exact and data == search_term) or \
+               (match == Match_begin and data.startswith(search_term)) or \
+               (match == Match_end   and data.endswith(search_term)) or \
                (match == Match_any   and data.find(search_term) != -1):
 
                 if output=='b1':
@@ -172,6 +172,8 @@ class SVAR_search(SVAR_file):
                         result.add(b1_pos)
                     else:
                         read_b1_data(self.b1_file, b1_pos, b1_len, result)
+                elif output=='id':
+                    result.add(entry_nr)
                 else:
                     result.add(data.decode('latin1'))
         return result
