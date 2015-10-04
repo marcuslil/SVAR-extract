@@ -155,4 +155,21 @@ class sveriges_befolkning_1990(SVAR_db):
             raise Exception(what)
     
         return '\n' + text + ':\n' + '\n'.join(self.search_and_parse(search_terms, output=output))
-    
+
+'''
+1: Ogift kvinna.
+1: Ogift man.
+2: Gift man (x).
+3: Gift kvinna (x).
+4: Frånskild kvinna
+4: Frånskild man (x).
+5: Änka (x).
+5: Änkling (x).
+6: Avliden man (nov 1990) (x).
+6: Avliden kvinna (nov 1990) (x).
+7: Gift kvinna (x).
+8: Pojke under 18 år.
+8: Flicka under 18 år.
+9: Pojke under 18 år.
+9: Flicka under 18 år.
+'''
