@@ -11,18 +11,18 @@ from svarsearch import *
 
 
 class SVAR_db:
-    search_fields = None
     files = None
     local_base_folder = None
     short_data_format = None
     detailed_data_format = None
-    local_files_ignore_accents = []
         
-    def search_data_reg(self, reg, search_terms, separator=';'):
-        res = self.local_files[reg].search(separator.join(search_terms) + separator, Match_begin, output='')
-        assert len(res) == 1, (res, search_terms)
-        res = list(res)[0].split(';')
-        assert res[:len(search_terms)] == search_terms
+    def search_data_reg(self, reg, search_terms, separator=';', accept_multiple=False):
+        res = self.local_files[reg].search(separator.join(search_terms) + separator, Match_begin, return_type=SVAR_search_return.key)
+        if accept_multiple:
+            assert len(res) > 0, (res, search_terms, type(search_terms[0]))
+        else:
+            assert len(res) == 1, (res, search_terms, type(search_terms[0]))
+        res = list(res)[0].split(separator)
         return res
         
     def set_backend_local_files(self, root='C:\\', base_folder=None):
@@ -59,10 +59,14 @@ class SVAR_db:
                 ignore_accents = 'local_file_ignore_accents' in data and data['local_file_ignore_accents']
                 #if data['type'] == 'index':
                 #    assert files['b1_file'] != None, data
+                key_term_char = data['local_file_key_term_char'] if  'local_file_key_term_char' in data else '\x00'
+                unique_keys = data['local_file_unique_keys'] if  'local_file_unique_keys' in data else True
                 self.local_files[name] = SVAR_search(data_file_name=files['base_file'],
                                                     block_index_file_name=files['block_index'],
                                                     b1_file_name=files['b1_file'],
-                                                    ignore_accents=ignore_accents)
+                                                    ignore_accents=ignore_accents,
+                                                    key_term_char=key_term_char,
+                                                    unique_keys=unique_keys)
             self.local_files[name].open()
             
     def search(self, search_terms=None, max_count=None):
@@ -75,7 +79,7 @@ class SVAR_db:
                     search_words = [search_words]
                 match = Match_star if not search_field + '_match' in search_terms2 else search_terms2.pop(search_field + '_match')
                 for search_word in search_words:
-                    tmp = self.local_files[search_field].search(search_word, match)
+                    tmp = self.local_files[search_field].search(search_word, match, return_type=SVAR_search_return.short_index)
                     if short_data_id == None:
                         short_data_id = tmp
                     else:
@@ -92,11 +96,11 @@ class SVAR_db:
        
         
     def search_and_parse(self, search_terms=None, output='detailed_data', max_count=None):
-        assert output in ['short_data_id', 'short_data', 'short_text', 'detailed_data_id', 'detailed_data', 'detailed_text'] or output.startswith('detailed_text_with_same_'), output
+        assert output in ['short_data_index', 'short_data', 'short_text', 'detailed_data_index', 'detailed_data', 'detailed_text'] or output.startswith('detailed_text_with_same_'), output
         
         res = self.search(search_terms, max_count)
-        
-        if output == 'short_data_id':
+                
+        if output == 'short_data_index':
             return res
 
         res = [self.local_files['short_data'].read_entry(x - 1) for x in res]
@@ -110,7 +114,7 @@ class SVAR_db:
         res = [x['detailed_data_id'] for x in res]
         res.sort()
         
-        if output == 'detailed_data_id':
+        if output == 'detailed_data_index':
             return res
             
         res = [self.local_files['detailed_data'].read_entry(x - 1) for x in res]
