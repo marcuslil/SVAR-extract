@@ -45,21 +45,21 @@ def parse_format(string, format_list):
             pos += t.itemsize
         elif f['type'] == 'terminated_string':
             data = find_terminated_string(string, pos, ord(f['term_char']) if 'term_char' in f else 0)
+            pos += len(data) + 1
             if not 'encode' in f or f['encode'] == True:
                 data = data.decode('latin1')
-            pos += len(data) + 1
         elif f['type'] == 'zeros' or f['type'] == 'fixed_string':
             if f['length'] == -1:
                 assert pos < length
                 data = string[pos: length]
             else:
                 data = string[pos: pos + f['length']]
+            pos += len(data)
             if f['type'] == 'zeros':
                 assert set(data) == set([0]), set(data)
             else:
                 if 'encode' in f and f['encode'] == True:
                     data = data.decode('latin1')                
-            pos += len(data)
         elif f['type'] == 'atend':
             data = ''
             assert pos == length, (res, pos, data, length, f)
@@ -69,7 +69,7 @@ def parse_format(string, format_list):
         if length != None:
             assert pos <= length, (res, pos, data, length, f)
         if 'expected' in f:
-            assert data == f['expected'], (data, f['expected'])
+            assert data == f['expected'], (data, f)
         if 'name' in f:
             res[f['name']] = data
     assert pos <= length
@@ -111,6 +111,15 @@ class SVAR_file:
                 block_index_file_name = data_file_name[:-1] + 'pz'
             else:
                 block_index_file_name = data_file_name + 'z'
+            if not isfile(block_index_file_name):
+                block_index_file_name = None
+
+        if not entry_index_file_name:
+            if data_file_name[-2:] == '.b':
+                entry_index_file_name = data_file_name[:-1] + 'p'
+                if not isfile(entry_index_file_name):
+                    block_index_file_name = None
+            
 
         self.block_index_file_name = block_index_file_name
         self.entry_index_file_name = entry_index_file_name
@@ -241,7 +250,13 @@ class SVAR_file:
                 pos = fromfile(self.entry_index_file, uint32, 1)[0]
                 self.curr_block.seek(pos)
         else:
-            self.curr_block.seek(entry_nr * self.entry_size + self.data_offset)
+            if self.file_type == File_type.fixed_size:
+                self.curr_block.seek(entry_nr * self.entry_size + self.data_offset)
+            else:
+                self.entry_index_file.seek(self.entry_index_header['start_pos'] + entry_nr * 4)
+                pos = fromfile(self.entry_index_file, uint32, 1)[0]
+                self.curr_block.seek(pos)
+
         
     def read_entry(self, entry_nr=-1):
         assert self.is_open == True
@@ -257,6 +272,8 @@ class SVAR_file:
         if self.file_type == File_type.fixed_size:
             return res
         else:
+            if res == b'':
+                return ''
             (unknown, length) = fromstring(res, "<u4, <u4")[0]
             length = int(length)
             res = self.curr_block.read(length + 4)
