@@ -72,7 +72,7 @@ class SVAR_search(SVAR_file):
             key = self.parse_key(entry)
             comp = compare(last, key, self.ignore_accents)
             if comp == 1 or (comp == 0 and self.ignore_accents == False and self.unique_keys == True):
-                print(n, '\n', last, '\n', key, comp)
+                print(n, '\n', last.decode('latin1'), '\n', key.decode('latin1'), comp)
                 status = False
             last = key
             n += 1
@@ -120,7 +120,7 @@ class SVAR_search(SVAR_file):
                         first_block_nr = test_block_nr
                         last_block_nr = test_block_nr + 1
     
-                if match == Match_begin or self.ignore_accents: # find last_block_nr
+                if match == Match_begin or non_uniqe_keys: # find last_block_nr
                     first_block_nr2 = first_block_nr
                     last_block_nr = self.block_index_header['length']
                     while last_block_nr != first_block_nr2 + 1:
@@ -154,7 +154,7 @@ class SVAR_search(SVAR_file):
                     first_entry_nr = test_entry_nr
                     last_entry_nr = test_entry_nr + 1
 
-            if match == Match_begin or self.ignore_accents:
+            if match == Match_begin or non_uniqe_keys:
                 self.load_block(last_block_nr - 1)
                 first_entry_nr2 = self.entrys_per_block * (last_block_nr - 1)
                 last_entry_nr = first_entry_nr2 + self.block_entrys
@@ -210,5 +210,5 @@ class SVAR_search(SVAR_file):
                     raise
                     
         if match == Match_exact and self.unique_keys:
-            assert hits == 1, hits
+            assert hits <= 1, hits
         return result
