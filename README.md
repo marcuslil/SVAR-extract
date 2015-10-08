@@ -3,12 +3,16 @@
 A tool to extract and search contents from SVAR databases
 
 example:
-import setup_sveriges_befolkning_1970
+from setup_sveriges_befolkning_1970 import *
 
-searches = {'last_name': '###',
-            'first_name': ['###','###'],
-            'birth_date': '###*'}
+search_terms = {'last_name': '###',
+                'first_name': ['###','###'],
+                'birth_date': '###*'}
 output = 'detailed_text_with_same_address'
 
-res = setup_sveriges_befolkning_1970.search_and_parse(searches=searches,output=output)
-print('\n'.join(res))
+svbef70 = sveriges_befolkning_1970()
+svbef70.set_backend_local_files()
+
+res = svbef70.search_and_parse(search_terms=searches,output=output)
+print('\n\n'.join(res))
+
